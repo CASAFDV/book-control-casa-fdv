@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/navbar';
 import { getScoreColor } from '@/lib/score-utils';
 
@@ -63,6 +63,11 @@ export default function SuperAdminPage() {
   const [gradeFamilyId, setGradeFamilyId] = useState('');
   const [filteredStudents, setFilteredStudents] = useState<Student[]>([]);
 
+  // Super Admin grades table state
+  const [saGradeData, setSaGradeData] = useState<Record<string, { score: string; comment: string; originalScore: string; originalComment: string; modified: boolean }>>({});
+  const [saHasChanges, setSaHasChanges] = useState(false);
+  const [saSaving, setSaSaving] = useState(false);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -122,11 +127,41 @@ export default function SuperAdminPage() {
     }
   }, [gradeFamilyId, students]);
 
+  const fetchGrades = useCallback(async () => {
+    if (!selectedWeekId) return;
+    try {
+      const res = await fetch(`/api/grades?week_id=${selectedWeekId}`);
+      const data = await res.json();
+      const allGrades: GradeEntry[] = data.grades || [];
+
+      // Build grade data map for table
+      const newGradeData: Record<string, { score: string; comment: string; originalScore: string; originalComment: string; modified: boolean }> = {};
+      for (const g of allGrades) {
+        const key = `${g.student_id}_${g.criteria_id}`;
+        const scoreStr = g.score != null ? String(Number(g.score)) : '';
+        const commentStr = g.comment || '';
+        newGradeData[key] = {
+          score: scoreStr,
+          comment: commentStr,
+          originalScore: scoreStr,
+          originalComment: commentStr,
+          modified: false,
+        };
+      }
+      setSaGradeData(newGradeData);
+      setSaHasChanges(false);
+      // Also set the old grades for backward compatibility
+      setGrades(allGrades);
+    } catch {
+      // Error
+    }
+  }, [selectedWeekId]);
+
   useEffect(() => {
-    if (selectedWeekId && selectedStudentId) {
+    if (selectedWeekId) {
       fetchGrades();
     }
-  }, [selectedWeekId, selectedStudentId]);
+  }, [selectedWeekId, fetchGrades]);
 
   async function fetchUsers() {
     try {
@@ -135,17 +170,6 @@ export default function SuperAdminPage() {
       if (data.users) setUsers(data.users);
     } catch {
       // Not authorized
-    }
-  }
-
-  async function fetchGrades() {
-    if (!selectedWeekId || !selectedStudentId) return;
-    try {
-      const res = await fetch(`/api/grades?student_id=${selectedStudentId}&week_id=${selectedWeekId}`);
-      const data = await res.json();
-      setGrades(data.grades || []);
-    } catch {
-      // Error
     }
   }
 
@@ -473,6 +497,66 @@ export default function SuperAdminPage() {
         </div>
       </div>
     );
+  }
+
+  function saUpdateGradeCell(studentId: string, criteriaId: string, field: 'score' | 'comment', value: string) {
+    const key = `${studentId}_${criteriaId}`;
+    setSaGradeData(prev => {
+      const existing = prev[key] || { score: '', comment: '', originalScore: '', originalComment: '', modified: false };
+      const updated = {
+        ...existing,
+        [field]: value,
+        modified: true,
+      };
+      const newData = { ...prev, [key]: updated };
+      const anyModified = Object.values(newData).some(c => c.modified);
+      setSaHasChanges(anyModified);
+      return newData;
+    });
+  }
+
+  async function saSaveAllGrades() {
+    if (!selectedWeekId) return;
+    setSaSaving(true);
+    try {
+      const modifiedEntries = Object.entries(saGradeData).filter(([, cell]) => cell.modified && cell.score !== '');
+      const promises = modifiedEntries.map(([key, cell]) => {
+        const lastUnderscoreIdx = key.lastIndexOf('_');
+        const studentId = key.substring(0, lastUnderscoreIdx);
+        const criteriaId = key.substring(lastUnderscoreIdx + 1);
+        return fetch('/api/grades', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: studentId,
+            criteria_id: criteriaId,
+            week_id: selectedWeekId,
+            score: Number(cell.score),
+            comment: cell.comment,
+          }),
+        });
+      });
+      await Promise.all(promises);
+      await fetchGrades();
+    } catch (error) {
+      console.error('Error saving grades:', error);
+    } finally {
+      setSaSaving(false);
+    }
+  }
+
+  function saGetStudentAverage(studentId: string): number {
+    const activeCriteria = criteriaList.filter(c => c.is_active === 1);
+    const scores: number[] = [];
+    for (const crit of activeCriteria) {
+      const key = `${studentId}_${crit.id}`;
+      const cell = saGradeData[key];
+      if (cell && cell.score !== '') {
+        scores.push(Number(cell.score));
+      }
+    }
+    if (scores.length === 0) return 0;
+    return Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100;
   }
 
   return (
@@ -1163,117 +1247,181 @@ export default function SuperAdminPage() {
         {/* Notas Tab */}
         {activeTab === 'notas' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-white">Gestión de Notas</h2>
-
-            {/* Selectors */}
-            <div className="metallic-card rounded-xl p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <select
-                  value={selectedWeekId}
-                  onChange={(e) => setSelectedWeekId(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">📝 Gestión de Notas</h2>
+              {saHasChanges && (
+                <button
+                  onClick={saSaveAllGrades}
+                  disabled={saSaving}
+                  className="metallic-btn px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 flex items-center gap-2"
                 >
-                  <option value="" className="bg-gray-900">Seleccionar semana</option>
-                  {weeks.map((w) => (
-                    <option key={w.id} value={w.id} className="bg-gray-900">{w.label}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={gradeFamilyId}
-                  onChange={(e) => { setGradeFamilyId(e.target.value); setSelectedStudentId(''); }}
-                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
-                >
-                  <option value="" className="bg-gray-900">Todas las familias</option>
-                  {families.map((f) => (
-                    <option key={f.id} value={f.id} className="bg-gray-900">{f.name}</option>
-                  ))}
-                </select>
-
-                <select
-                  value={selectedStudentId}
-                  onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
-                >
-                  <option value="" className="bg-gray-900">Seleccionar estudiante</option>
-                  {filteredStudents.map((s) => (
-                    <option key={s.id} value={s.id} className="bg-gray-900">{s.name} ({s.family_name})</option>
-                  ))}
-                </select>
-              </div>
+                  {saSaving ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                      Guardando...
+                    </>
+                  ) : (
+                    <>💾 Guardar Todo</>
+                  )}
+                </button>
+              )}
             </div>
 
-            {/* Add Grade Form */}
-            {selectedWeekId && selectedStudentId && (
-              <div className="metallic-card rounded-xl p-4 space-y-3">
-                <h3 className="font-bold text-white text-sm">Agregar/Editar Nota</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <select
-                    value={selectedCriteriaId}
-                    onChange={(e) => setSelectedCriteriaId(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
-                  >
-                    <option value="" className="bg-gray-900">Seleccionar criterio</option>
-                    {criteriaList.map((c) => (
-                      <option key={c.id} value={c.id} className="bg-gray-900">{c.name}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="0"
-                    max="20"
-                    step="0.1"
-                    placeholder="Nota (0-20)"
-                    value={gradeScore}
-                    onChange={(e) => setGradeScore(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Comentario (opcional)"
-                    value={gradeComment}
-                    onChange={(e) => setGradeComment(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm placeholder:text-white/30 focus:border-yellow-500/50 focus:outline-none"
-                  />
-                </div>
-                <button
-                  onClick={saveGrade}
-                  disabled={!selectedCriteriaId || !gradeScore}
-                  className="metallic-btn px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Guardar Nota
-                </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={selectedWeekId}
+                onChange={(e) => setSelectedWeekId(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
+              >
+                <option value="" className="bg-gray-900">Seleccionar semana</option>
+                {weeks.map((w) => (
+                  <option key={w.id} value={w.id} className="bg-gray-900">{w.label}</option>
+                ))}
+              </select>
+              <select
+                value={gradeFamilyId}
+                onChange={(e) => setGradeFamilyId(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
+              >
+                <option value="" className="bg-gray-900">Todas las familias</option>
+                {families.map((f) => (
+                  <option key={f.id} value={f.id} className="bg-gray-900">{f.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {selectedWeekId && criteriaList.filter(c => c.is_active === 1).length > 0 && (
+              <div className="overflow-x-auto metallic-card rounded-xl">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider sticky left-0 bg-gray-900/95 z-10 min-w-[180px]">
+                        Estudiante
+                      </th>
+                      {criteriaList.filter(c => c.is_active === 1).map((crit) => (
+                        <th key={crit.id} className="text-center px-1 py-2.5 min-w-[80px]">
+                          <div className="text-yellow-500/80 font-bold text-[11px] uppercase tracking-wider">{crit.name}</div>
+                          <div className="text-white/30 text-[10px]">Nota</div>
+                        </th>
+                      ))}
+                      {criteriaList.filter(c => c.is_active === 1).map((crit) => (
+                        <th key={`comment_${crit.id}`} className="text-center px-1 py-2.5 min-w-[100px]">
+                          <div className="text-blue-400/60 font-bold text-[10px] uppercase tracking-wider">{crit.name}</div>
+                          <div className="text-white/30 text-[10px]">Coment.</div>
+                        </th>
+                      ))}
+                      <th className="text-center px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider min-w-[70px]">
+                        Prom.
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {families
+                      .filter(f => !gradeFamilyId || f.id === gradeFamilyId)
+                      .map((family) => {
+                        const familyStudents = filteredStudents.filter(s => s.family_id === family.id);
+                        if (familyStudents.length === 0) return null;
+                        return (
+                          <React.Fragment key={family.id}>
+                            <tr className="bg-white/5">
+                              <td
+                                colSpan={criteriaList.filter(c => c.is_active === 1).length * 2 + 2}
+                                className="px-3 py-1.5 font-bold text-xs uppercase tracking-wider"
+                                style={{ color: family.color || '#D4AF37' }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: family.color || '#D4AF37' }} />
+                                  {family.name}
+                                </div>
+                              </td>
+                            </tr>
+                            {familyStudents.map((student) => {
+                              const avg = saGetStudentAverage(student.id);
+                              const avgColor = getScoreColor(avg);
+                              const activeCriteria = criteriaList.filter(c => c.is_active === 1);
+                              return (
+                                <tr key={student.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                  <td className="px-3 py-1.5 text-white text-sm font-medium sticky left-0 bg-gray-900/90 z-10">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1.5 h-6 rounded-full shrink-0" style={{ backgroundColor: student.family_color || '#D4AF37' }} />
+                                      <span className="truncate max-w-[150px]">{student.name}</span>
+                                    </div>
+                                  </td>
+                                  {activeCriteria.map((crit) => {
+                                    const key = `${student.id}_${crit.id}`;
+                                    const cell = saGradeData[key];
+                                    const score = cell?.score || '';
+                                    const scoreNum = Number(score);
+                                    const hasScore = score !== '' && !isNaN(scoreNum);
+                                    const cellColor = hasScore ? getScoreColor(scoreNum) : '';
+                                    return (
+                                      <td key={crit.id} className="px-1 py-1 text-center">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="20"
+                                          step="0.1"
+                                          value={score}
+                                          onChange={(e) => saUpdateGradeCell(student.id, crit.id, 'score', e.target.value)}
+                                          className="w-full max-w-[70px] px-2 py-1.5 rounded text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50 transition-colors"
+                                          style={{
+                                            backgroundColor: hasScore ? `${cellColor}20` : 'rgba(255,255,255,0.05)',
+                                            color: hasScore ? cellColor : 'rgba(255,255,255,0.3)',
+                                            border: cell?.modified ? '1px solid rgba(234,179,8,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                          }}
+                                          placeholder="—"
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                  {activeCriteria.map((crit) => {
+                                    const key = `${student.id}_${crit.id}`;
+                                    const cell = saGradeData[key];
+                                    return (
+                                      <td key={`comment_${crit.id}`} className="px-1 py-1">
+                                        <input
+                                          type="text"
+                                          value={cell?.comment || ''}
+                                          onChange={(e) => saUpdateGradeCell(student.id, crit.id, 'comment', e.target.value)}
+                                          placeholder="..."
+                                          className="w-full max-w-[100px] px-2 py-1.5 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors"
+                                          style={{
+                                            backgroundColor: cell?.comment ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)',
+                                            color: cell?.comment ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)',
+                                            border: cell?.modified ? '1px solid rgba(59,130,246,0.3)' : '1px solid rgba(255,255,255,0.05)',
+                                          }}
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                  <td className="px-2 py-1 text-center">
+                                    {avg > 0 ? (
+                                      <span
+                                        className="inline-block px-2 py-1 rounded text-xs font-bold"
+                                        style={{ backgroundColor: `${avgColor}25`, color: avgColor }}
+                                      >
+                                        {avg.toFixed(1)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-white/20 text-xs">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </React.Fragment>
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
             )}
-
-            {/* Current Grades */}
-            {grades.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-sm font-bold text-white/60 uppercase">Notas Actuales</h3>
-                {grades.map((grade) => {
-                  const score = Number(grade.score);
-                  const color = getScoreColor(score);
-                  return (
-                    <div key={grade.id} className="metallic-card rounded-lg p-3 flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-white text-sm">{grade.criteria_name}</p>
-                        {grade.comment && <p className="text-xs text-white/40 italic">{grade.comment}</p>}
-                      </div>
-                      <span
-                        className="score-badge text-xs"
-                        style={{ backgroundColor: color, color: '#fff' }}
-                      >
-                        {score.toFixed(1)}
-                      </span>
-                      <button
-                        onClick={() => deleteGrade(grade.criteria_id)}
-                        className="text-white/40 hover:text-red-400 transition-colors p-1"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                      </button>
-                    </div>
-                  );
-                })}
+            {!selectedWeekId && (
+              <div className="metallic-card rounded-xl p-10 text-center">
+                <p className="text-white/50">Selecciona una semana para comenzar a calificar</p>
               </div>
             )}
           </div>
