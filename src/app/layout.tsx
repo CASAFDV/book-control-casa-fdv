@@ -18,6 +18,13 @@ export const metadata: Metadata = {
   description: "Sistema de gestión de calificaciones - Casa FDV",
   keywords: ["Casa FDV", "calificaciones", "estudiantes", "gestión"],
   authors: [{ name: "Casa FDV" }],
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({
