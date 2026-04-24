@@ -16,13 +16,14 @@ interface Week {
 interface WeekSelectorProps {
   selectedWeekId: string | null;
   onWeekChange: (weekId: string) => void;
+  showFutureWeeks?: boolean;
 }
 
 interface GroupedWeeks {
   [key: string]: Week[];
 }
 
-export function WeekSelector({ selectedWeekId, onWeekChange }: WeekSelectorProps) {
+export function WeekSelector({ selectedWeekId, onWeekChange, showFutureWeeks = false }: WeekSelectorProps) {
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [groupedWeeks, setGroupedWeeks] = useState<GroupedWeeks>({});
   const [isOpen, setIsOpen] = useState(false);
@@ -47,12 +48,20 @@ export function WeekSelector({ selectedWeekId, onWeekChange }: WeekSelectorProps
 
         const weeksRes = await fetch(`/api/weeks?year_id=${activeYear.id}`);
         const weeksData = await weeksRes.json();
-        const weeksList: Week[] = weeksData.weeks || [];
-        setWeeks(weeksList);
+        const allWeeks: Week[] = weeksData.weeks || [];
+
+        // Filter out future weeks unless showFutureWeeks is true
+        const now = new Date();
+        now.setHours(23, 59, 59, 999); // End of today
+        const availableWeeks = showFutureWeeks
+          ? allWeeks
+          : allWeeks.filter(w => new Date(w.sunday_date) <= now);
+
+        setWeeks(availableWeeks);
 
         // Group by month
         const grouped: GroupedWeeks = {};
-        for (const week of weeksList) {
+        for (const week of availableWeeks) {
           const key = `${week.month_name} ${week.year}`;
           if (!grouped[key]) {
             grouped[key] = [];
@@ -61,14 +70,10 @@ export function WeekSelector({ selectedWeekId, onWeekChange }: WeekSelectorProps
         }
         setGroupedWeeks(grouped);
 
-        // Auto-select current week if none selected
-        if (!selectedWeekId && weeksList.length > 0) {
-          const now = new Date();
-          const currentWeek = weeksList.find((w) => {
-            const weekDate = new Date(w.sunday_date);
-            return weekDate <= now;
-          });
-          const weekToSelect = currentWeek || weeksList[weeksList.length - 1];
+        // Auto-select the most recent past week
+        if (!selectedWeekId && availableWeeks.length > 0) {
+          // The last week in the filtered list is the most recent one
+          const weekToSelect = availableWeeks[availableWeeks.length - 1];
           onWeekChange(weekToSelect.id);
         }
       } catch (error) {
@@ -76,7 +81,7 @@ export function WeekSelector({ selectedWeekId, onWeekChange }: WeekSelectorProps
       }
     }
     loadWeeks();
-  }, [selectedWeekId, onWeekChange]);
+  }, [selectedWeekId, onWeekChange, showFutureWeeks]);
 
   return (
     <div className="relative">

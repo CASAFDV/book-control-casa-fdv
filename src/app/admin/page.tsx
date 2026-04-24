@@ -210,10 +210,16 @@ export default function AdminPage() {
       if (activeYear) {
         const weeksRes = await fetch(`/api/weeks?year_id=${activeYear.id}`);
         const weeksData = await weeksRes.json();
-        const weeksList = weeksData.weeks || [];
-        setWeeks(weeksList);
-        if (weeksList.length > 0) {
-          setSelectedWeekId(weeksList[weeksList.length - 1].id);
+        const allWeeks = weeksData.weeks || [];
+        // Admin: show all weeks but auto-select the current one
+        setWeeks(allWeeks);
+        if (allWeeks.length > 0) {
+          // Auto-select the most recent past week (current week)
+          const now = new Date();
+          now.setHours(23, 59, 59, 999);
+          const pastWeeks = allWeeks.filter((w: { sunday_date: string }) => new Date(w.sunday_date) <= now);
+          const weekToSelect = pastWeeks.length > 0 ? pastWeeks[pastWeeks.length - 1] : allWeeks[0];
+          setSelectedWeekId(weekToSelect.id);
         }
       }
     } catch (error) {
