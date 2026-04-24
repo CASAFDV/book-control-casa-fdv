@@ -11,6 +11,7 @@ interface CriteriaItem { id: string; name: string; is_active: number; order_inde
 interface Week { id: string; week_number: number; label: string; academic_year_id: string; }
 interface GradeEntry { id: string; student_id: string; criteria_id: string; week_id: string; score: number; comment: string; criteria_name?: string; }
 interface User { id: string; username: string; role: string; name: string; }
+interface Permission { criteria_id: string; criteria_name: string; can_grade: number; can_comment: number; }
 
 function GradeRow({ grade, selectedStudentId, selectedWeekId, onUpdate }: {
   grade: GradeEntry;
@@ -136,6 +137,7 @@ function GradeRow({ grade, selectedStudentId, selectedWeekId, onUpdate }: {
 export default function AdminPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [userPermissions, setUserPermissions] = useState<Permission[]>([]);
   const [activeTab, setActiveTab] = useState<'notas' | 'comentarios'>('notas');
   const [families, setFamilies] = useState<Family[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -166,6 +168,14 @@ export default function AdminPage() {
         const data = await res.json();
         if (data.user && (data.user.role === 'admin' || data.user.role === 'super_admin')) {
           setUser(data.user);
+          // Load criteria permissions for this admin
+          if (data.user.role === 'admin') {
+            const permRes = await fetch('/api/users/me/permissions');
+            const permData = await permRes.json();
+            if (permData.permissions) {
+              setUserPermissions(permData.permissions);
+            }
+          }
           await loadInitialData();
         } else {
           router.push('/');
@@ -193,7 +203,8 @@ export default function AdminPage() {
 
       setFamilies(famData.families || []);
       setStudents(stuData.students || []);
-      setCriteriaList((critData.criteria || []).filter((c: CriteriaItem) => c.is_active === 1));
+      const activeCriteria = (critData.criteria || []).filter((c: CriteriaItem) => c.is_active === 1);
+      setCriteriaList(activeCriteria);
 
       const activeYear = (yearData.years || []).find((y: { is_active: number }) => y.is_active === 1);
       if (activeYear) {
@@ -321,6 +332,9 @@ export default function AdminPage() {
           >
             💬 Comentarios
           </button>
+          {user?.role === 'admin' && userPermissions.length === 0 && (
+            <span className="text-xs text-red-400/70 self-center ml-2">Sin criterios asignados - contacte al Super Admin</span>
+          )}
         </div>
 
         {/* Notas Tab */}
@@ -377,7 +391,7 @@ export default function AdminPage() {
                     className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm focus:border-yellow-500/50 focus:outline-none"
                   >
                     <option value="" className="bg-gray-900">Seleccionar criterio</option>
-                    {criteriaList.map((c) => (
+                    {(user?.role === 'super_admin' ? criteriaList : criteriaList.filter(c => userPermissions.some(p => p.criteria_id === c.id && Number(p.can_grade) === 1))).map((c) => (
                       <option key={c.id} value={c.id} className="bg-gray-900">{c.name}</option>
                     ))}
                   </select>
@@ -413,7 +427,9 @@ export default function AdminPage() {
             {grades.length > 0 && (
               <div className="space-y-2">
                 <h3 className="text-sm font-bold text-white/60 uppercase">Notas Actuales</h3>
-                {grades.map((grade) => (
+                {grades
+                  .filter(grade => user?.role === 'super_admin' || userPermissions.some(p => p.criteria_id === grade.criteria_id && Number(p.can_grade) === 1))
+                  .map((grade) => (
                   <GradeRow
                     key={grade.id}
                     grade={grade}

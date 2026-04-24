@@ -40,6 +40,13 @@ interface User {
   name: string;
 }
 
+interface Permission {
+  criteria_id: string;
+  criteria_name: string;
+  can_grade: number;
+  can_comment: number;
+}
+
 export default function StudentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [student, setStudent] = useState<Student | null>(null);
@@ -49,6 +56,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   const [selectedWeekId, setSelectedWeekId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const [userPermissions, setUserPermissions] = useState<Permission[]>([]);
   const [editingGrade, setEditingGrade] = useState<string | null>(null);
   const [editScore, setEditScore] = useState('');
   const [editComment, setEditComment] = useState('');
@@ -72,7 +80,17 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
     try {
       const res = await fetch('/api/auth/session');
       const data = await res.json();
-      if (data.user) setUser(data.user);
+      if (data.user) {
+        setUser(data.user);
+        // Load criteria permissions for admin users
+        if (data.user.role === 'admin') {
+          const permRes = await fetch('/api/users/me/permissions');
+          const permData = await permRes.json();
+          if (permData.permissions) {
+            setUserPermissions(permData.permissions);
+          }
+        }
+      }
     } catch {
       // Not logged in
     }
@@ -178,6 +196,20 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   }
 
   const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+  // Check if admin can grade a specific criteria
+  const canGradeCriteria = (criteriaId: string) => {
+    if (!user || user.role === 'super_admin') return true;
+    if (user.role === 'admin') {
+      return userPermissions.some(p => p.criteria_id === criteriaId && Number(p.can_grade) === 1);
+    }
+    return false;
+  };
+  // Check if admin can comment
+  const canCommentGeneral = user?.role === 'super_admin' || userPermissions.some(p => Number(p.can_comment) === 1);
+  // Filter criteria for admin - only show criteria they can grade
+  const visibleCriteria = user?.role === 'admin'
+    ? criteria.filter(c => userPermissions.some(p => p.criteria_id === c.id && Number(p.can_grade) === 1))
+    : criteria;
   const weeklyAvg = getWeeklyAverage();
   const lowest = findLowestCriteria();
 
@@ -242,13 +274,13 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
               <h3 className="text-sm font-bold uppercase tracking-wider text-yellow-500/80">
                 Criterios Evaluados
               </h3>
-              {criteria.length === 0 ? (
+              {visibleCriteria.length === 0 ? (
                 <div className="metallic-card rounded-xl p-6 text-center">
-                  <p className="text-white/50">No hay criterios activos</p>
+                  <p className="text-white/50">{user?.role === 'admin' ? 'No tienes criterios asignados - contacta al Super Admin' : 'No hay criterios activos'}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {criteria.map((crit) => {
+                  {visibleCriteria.map((crit) => {
                     const grade = grades.find(g => g.criteria_id === crit.id);
                     const score = grade ? Number(grade.score) : 0;
                     const comment = grade?.comment || '';
@@ -322,7 +354,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                                       {getScoreLabel(score)}
                                     </span>
                                   )}
-                                  {isAdmin && (
+                                  {canGradeCriteria(crit.id) && (
                                     <button
                                       onClick={() => {
                                         setEditingGrade(crit.id);
@@ -393,7 +425,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
                         <p className="text-white/40 text-sm">Sin comentario general</p>
                       )}
                     </div>
-                    {isAdmin && (
+                    {canCommentGeneral && (
                       <button
                         onClick={() => {
                           setEditingGeneralComment(true);

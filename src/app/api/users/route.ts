@@ -11,7 +11,22 @@ export async function GET() {
     }
 
     const result = await turso.execute('SELECT id, username, role, name, created_at FROM users ORDER BY role ASC, name ASC');
-    return NextResponse.json({ users: result.rows });
+
+    // Get permissions for all admin users
+    const usersWithPermissions = await Promise.all(
+      result.rows.map(async (user) => {
+        if (user.role === 'admin') {
+          const permResult = await turso.execute({
+            sql: 'SELECT criteria_id, can_grade, can_comment FROM admin_criteria_permissions WHERE user_id = ?',
+            args: [user.id],
+          });
+          return { ...user, criteria_permissions: permResult.rows };
+        }
+        return { ...user, criteria_permissions: [] };
+      })
+    );
+
+    return NextResponse.json({ users: usersWithPermissions });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

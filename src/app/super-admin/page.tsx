@@ -10,7 +10,7 @@ interface Family { id: string; name: string; color: string; }
 interface Student { id: string; name: string; family_id: string; family_name: string; family_color: string; }
 interface CriteriaItem { id: string; name: string; is_active: number; order_index: number; }
 interface Year { id: string; name: string; start_date: string; end_date: string; is_active: number; }
-interface AdminUser { id: string; username: string; role: string; name: string; }
+interface AdminUser { id: string; username: string; role: string; name: string; criteria_permissions?: { criteria_id: string; can_grade: number; can_comment: number }[]; }
 interface Week { id: string; week_number: number; label: string; month: number; year: number; month_name: string; sunday_date: string; academic_year_id: string; }
 interface GradeEntry { id: string; student_id: string; criteria_id: string; week_id: string; score: number; comment: string; student_name?: string; criteria_name?: string; }
 
@@ -51,6 +51,8 @@ export default function SuperAdminPage() {
   const [userPassword, setUserPassword] = useState('');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('admin');
+  const [userCriteriaPermissions, setUserCriteriaPermissions] = useState<Record<string, { can_grade: boolean; can_comment: boolean }>>({});
+  const [managingPermissionsFor, setManagingPermissionsFor] = useState<string | null>(null);
 
   // Grades form
   const [selectedWeekId, setSelectedWeekId] = useState('');
@@ -157,6 +159,8 @@ export default function SuperAdminPage() {
     setUserPassword('');
     setUserName('');
     setUserRole('admin');
+    setUserCriteriaPermissions({});
+    setManagingPermissionsFor(null);
   }
 
   // CRUD Operations
@@ -308,10 +312,21 @@ export default function SuperAdminPage() {
   async function saveUser() {
     if (!userUsername || !userName || (!editingItem && !userPassword)) return;
     try {
+      const criteriaPermissions = userRole === 'admin'
+        ? Object.entries(userCriteriaPermissions)
+            .filter(([, perms]) => perms.can_grade || perms.can_comment)
+            .map(([criteria_id, perms]) => ({
+              criteria_id,
+              can_grade: perms.can_grade,
+              can_comment: perms.can_comment,
+            }))
+        : [];
+
       const body: Record<string, unknown> = {
         username: userUsername,
         name: userName,
         role: userRole,
+        criteria_permissions: criteriaPermissions,
       };
       if (userPassword) body.password = userPassword;
       if (editingItem) {
@@ -334,6 +349,51 @@ export default function SuperAdminPage() {
     } catch (error) {
       console.error('Error saving user:', error);
     }
+  }
+
+  async function savePermissions(userId: string) {
+    const criteriaPermissions = Object.entries(userCriteriaPermissions)
+      .filter(([, perms]) => perms.can_grade || perms.can_comment)
+      .map(([criteria_id, perms]) => ({
+        criteria_id,
+        can_grade: perms.can_grade,
+        can_comment: perms.can_comment,
+      }));
+
+    try {
+      await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: userId,
+          criteria_permissions: criteriaPermissions,
+        }),
+      });
+      setManagingPermissionsFor(null);
+      setUserCriteriaPermissions({});
+      fetchUsers();
+    } catch (error) {
+      console.error('Error saving permissions:', error);
+    }
+  }
+
+  function openPermissionsManager(user: AdminUser) {
+    const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+    // Initialize all criteria as unchecked
+    for (const crit of criteriaList) {
+      perms[crit.id] = { can_grade: false, can_comment: false };
+    }
+    // Load existing permissions
+    if (user.criteria_permissions) {
+      for (const p of user.criteria_permissions) {
+        perms[p.criteria_id] = {
+          can_grade: Number(p.can_grade) === 1,
+          can_comment: Number(p.can_comment) === 1,
+        };
+      }
+    }
+    setUserCriteriaPermissions(perms);
+    setManagingPermissionsFor(user.id);
   }
 
   async function deleteUser(id: string) {
@@ -769,7 +829,15 @@ export default function SuperAdminPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Administradores</h2>
               <button
-                onClick={() => { setShowAddForm(true); setEditingItem(null); setUserUsername(''); setUserPassword(''); setUserName(''); setUserRole('admin'); }}
+                onClick={() => {
+                  setShowAddForm(true); setEditingItem(null); setUserUsername(''); setUserPassword(''); setUserName(''); setUserRole('admin');
+                  // Initialize all criteria as unchecked for new admin
+                  const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+                  for (const crit of criteriaList) {
+                    perms[crit.id] = { can_grade: false, can_comment: false };
+                  }
+                  setUserCriteriaPermissions(perms);
+                }}
                 className="metallic-btn-gold px-4 py-2 rounded-lg text-sm font-bold"
               >
                 + Agregar
@@ -812,11 +880,201 @@ export default function SuperAdminPage() {
                     <option value="super_admin" className="bg-gray-900">Super Admin</option>
                   </select>
                 </div>
+
+                {/* Criteria Permissions for Admin role */}
+                {userRole === 'admin' && (
+                  <div className="space-y-2 mt-2">
+                    <h4 className="text-sm font-bold text-yellow-400 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      Permisos de Criterios
+                    </h4>
+                    <p className="text-xs text-white/40">Selecciona qué criterios puede ver y calificar este administrador.</p>
+                    <div className="space-y-1">
+                      {criteriaList.filter(c => c.is_active === 1).map((crit) => {
+                        const perm = userCriteriaPermissions[crit.id];
+                        return (
+                          <div key={crit.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                            <label className="flex items-center gap-2 flex-1 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={perm?.can_grade || false}
+                                onChange={(e) => {
+                                  setUserCriteriaPermissions(prev => ({
+                                    ...prev,
+                                    [crit.id]: {
+                                      can_grade: e.target.checked,
+                                      can_comment: e.target.checked ? (prev[crit.id]?.can_comment ?? true) : false,
+                                    }
+                                  }));
+                                }}
+                                className="rounded bg-white/10 border-white/20 accent-yellow-500"
+                              />
+                              <span className="text-sm text-white">{crit.name}</span>
+                            </label>
+                            {perm?.can_grade && (
+                              <label className="flex items-center gap-1 text-xs text-white/50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={perm?.can_comment || false}
+                                  onChange={(e) => {
+                                    setUserCriteriaPermissions(prev => ({
+                                      ...prev,
+                                      [crit.id]: {
+                                        ...prev[crit.id],
+                                        can_comment: e.target.checked,
+                                      }
+                                    }));
+                                  }}
+                                  className="rounded bg-white/10 border-white/20 accent-blue-400"
+                                />
+                                Comentar
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Quick actions */}
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+                          for (const crit of criteriaList.filter(c => c.is_active === 1)) {
+                            perms[crit.id] = { can_grade: true, can_comment: true };
+                          }
+                          setUserCriteriaPermissions(perms);
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors"
+                      >
+                        Seleccionar todos
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+                          for (const crit of criteriaList.filter(c => c.is_active === 1)) {
+                            perms[crit.id] = { can_grade: false, can_comment: false };
+                          }
+                          setUserCriteriaPermissions(perms);
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
+                      >
+                        Deseleccionar todos
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <button onClick={saveUser} className="metallic-btn px-4 py-2 rounded-lg text-sm font-medium text-white">
                     {editingItem ? 'Actualizar' : 'Guardar'}
                   </button>
                   <button onClick={resetForm} className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/70 hover:bg-white/20">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Permissions Manager Panel */}
+            {managingPermissionsFor && (
+              <div className="metallic-card rounded-xl p-4 space-y-3 border-2 border-yellow-500/30">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-yellow-400 text-sm flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Gestionar Permisos de Criterios
+                  </h3>
+                  <span className="text-sm text-white/60">
+                    {users.find(u => u.id === managingPermissionsFor)?.name}
+                  </span>
+                </div>
+                <p className="text-xs text-white/40">Activa los criterios que este administrador puede ver y calificar.</p>
+                <div className="space-y-1">
+                  {criteriaList.filter(c => c.is_active === 1).map((crit) => {
+                    const perm = userCriteriaPermissions[crit.id];
+                    return (
+                      <div key={crit.id} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                        <label className="flex items-center gap-2 flex-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={perm?.can_grade || false}
+                            onChange={(e) => {
+                              setUserCriteriaPermissions(prev => ({
+                                ...prev,
+                                [crit.id]: {
+                                  can_grade: e.target.checked,
+                                  can_comment: e.target.checked ? (prev[crit.id]?.can_comment ?? true) : false,
+                                }
+                              }));
+                            }}
+                            className="rounded bg-white/10 border-white/20 accent-yellow-500"
+                          />
+                          <span className="text-sm text-white">{crit.name}</span>
+                        </label>
+                        {perm?.can_grade && (
+                          <label className="flex items-center gap-1 text-xs text-white/50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={perm?.can_comment || false}
+                              onChange={(e) => {
+                                setUserCriteriaPermissions(prev => ({
+                                  ...prev,
+                                  [crit.id]: {
+                                    ...prev[crit.id],
+                                    can_comment: e.target.checked,
+                                  }
+                                }));
+                              }}
+                              className="rounded bg-white/10 border-white/20 accent-blue-400"
+                            />
+                            Comentar
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Quick actions */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+                      for (const crit of criteriaList.filter(c => c.is_active === 1)) {
+                        perms[crit.id] = { can_grade: true, can_comment: true };
+                      }
+                      setUserCriteriaPermissions(perms);
+                    }}
+                    className="text-xs px-2 py-1 rounded bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors"
+                  >
+                    Seleccionar todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+                      for (const crit of criteriaList.filter(c => c.is_active === 1)) {
+                        perms[crit.id] = { can_grade: false, can_comment: false };
+                      }
+                      setUserCriteriaPermissions(perms);
+                    }}
+                    className="text-xs px-2 py-1 rounded bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors"
+                  >
+                    Deseleccionar todos
+                  </button>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => savePermissions(managingPermissionsFor)}
+                    className="metallic-btn px-4 py-2 rounded-lg text-sm font-medium text-white"
+                  >
+                    Guardar Permisos
+                  </button>
+                  <button
+                    onClick={() => { setManagingPermissionsFor(null); setUserCriteriaPermissions({}); }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-white/70 hover:bg-white/20"
+                  >
                     Cancelar
                   </button>
                 </div>
@@ -832,10 +1090,34 @@ export default function SuperAdminPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-white text-sm truncate">{u.name}</p>
                     <p className="text-xs text-white/40">@{u.username}</p>
+                    {u.role === 'admin' && u.criteria_permissions && u.criteria_permissions.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {u.criteria_permissions.map((p) => {
+                          const critName = criteriaList.find(c => c.id === p.criteria_id)?.name;
+                          return critName ? (
+                            <span key={p.criteria_id} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/20">
+                              {critName}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    {u.role === 'admin' && (!u.criteria_permissions || u.criteria_permissions.length === 0) && (
+                      <p className="text-[10px] text-red-400/70 mt-0.5">Sin criterios asignados</p>
+                    )}
                   </div>
                   <span className={`text-xs px-2 py-0.5 rounded ${u.role === 'super_admin' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
                     {u.role === 'super_admin' ? 'Super Admin' : 'Admin'}
                   </span>
+                  {u.role === 'admin' && (
+                    <button
+                      onClick={() => openPermissionsManager(u)}
+                      className="text-white/40 hover:text-blue-400 transition-colors p-1"
+                      title="Gestionar permisos"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setEditingItem(u.id);
@@ -843,6 +1125,17 @@ export default function SuperAdminPage() {
                       setUserName(u.name);
                       setUserRole(u.role);
                       setUserPassword('');
+                      // Load existing permissions for editing
+                      if (u.role === 'admin') {
+                        const perms: Record<string, { can_grade: boolean; can_comment: boolean }> = {};
+                        for (const crit of criteriaList) {
+                          const existingPerm = u.criteria_permissions?.find(p => p.criteria_id === crit.id);
+                          perms[crit.id] = existingPerm
+                            ? { can_grade: Number(existingPerm.can_grade) === 1, can_comment: Number(existingPerm.can_comment) === 1 }
+                            : { can_grade: false, can_comment: false };
+                        }
+                        setUserCriteriaPermissions(perms);
+                      }
                       setShowAddForm(true);
                     }}
                     className="text-white/40 hover:text-yellow-400 transition-colors p-1"
