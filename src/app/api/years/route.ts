@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import turso from '@/lib/turso';
 import { getSession } from '@/lib/auth';
+import { formatWeekLabel, MONTH_NAMES } from '@/lib/week-utils';
 
 export async function GET() {
   try {
@@ -30,8 +31,6 @@ export async function POST(request: NextRequest) {
     });
 
     // Generate weeks for this year (Sundays from start_date to end_date)
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    
     const startDate = new Date(start_date);
     const endDate = new Date(end_date);
     
@@ -49,7 +48,7 @@ export async function POST(request: NextRequest) {
       const weekId = `week_${id}_${weekNum}`;
       await turso.execute({
         sql: 'INSERT INTO weeks (id, academic_year_id, week_number, month, year, month_name, sunday_date, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        args: [weekId, id, weekNum, month + 1, year, monthNames[month], sundayDate, `Semana ${weekNum} - ${monthNames[month]} ${year}`],
+        args: [weekId, id, weekNum, month + 1, year, MONTH_NAMES[month], sundayDate, formatWeekLabel(currentDate)],
       });
       
       weekNum++;

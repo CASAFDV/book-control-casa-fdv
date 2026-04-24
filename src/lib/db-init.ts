@@ -1,4 +1,5 @@
 import turso from './turso';
+import { formatWeekLabel, MONTH_NAMES } from './week-utils';
 
 export async function initializeDatabase() {
   // Users table
@@ -158,18 +159,10 @@ export async function initializeDatabase() {
     });
 
     // Generate weeks from April 2026 to April 2027 (Sundays)
-    const weeks: { id: string; weekNum: number; month: number; year: number; monthName: string; sundayDate: string; label: string }[] = [];
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    
     let weekNum = 1;
     const startDate = new Date(2026, 3, 1); // April 1, 2026
     const endDate = new Date(2027, 3, 30); // April 30, 2027
     
-    // Find first Sunday on or after April 1, 2026
-    const firstSunday = new Date(startDate);
-    firstSunday.setDate(firstSunday.getDate() + ((7 - firstSunday.getDay()) % 7 || 7));
-    // Actually: getDay() returns 0 for Sunday, so if April 1 is Sunday (getDay=0), we use it
-    // Otherwise find next Sunday
     let currentDate = new Date(startDate);
     if (currentDate.getDay() !== 0) {
       currentDate.setDate(currentDate.getDate() + (7 - currentDate.getDay()));
@@ -180,26 +173,15 @@ export async function initializeDatabase() {
       const year = currentDate.getFullYear();
       const sundayDate = currentDate.toISOString().split('T')[0];
       
-      weeks.push({
-        id: `week_${weekNum}_${year}`,
-        weekNum,
-        month: month + 1,
-        year,
-        monthName: monthNames[month],
-        sundayDate,
-        label: `Semana ${weekNum} - ${monthNames[month]} ${year}`,
+      await turso.execute({
+        sql: 'INSERT INTO weeks (id, academic_year_id, week_number, month, year, month_name, sunday_date, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [`week_${weekNum}_${year}`, 'year_2026_2027', weekNum, month + 1, year, MONTH_NAMES[month], sundayDate, formatWeekLabel(currentDate)],
       });
       
       weekNum++;
       currentDate.setDate(currentDate.getDate() + 7);
     }
     
-    for (const week of weeks) {
-      await turso.execute({
-        sql: 'INSERT INTO weeks (id, academic_year_id, week_number, month, year, month_name, sunday_date, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        args: [week.id, 'year_2026_2027', week.weekNum, week.month, week.year, week.monthName, week.sundayDate, week.label],
-      });
-    }
   }
 
   console.log('Database initialized successfully');
