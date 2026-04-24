@@ -198,15 +198,16 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
   const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
   // Check if admin can grade a specific criteria
   const canGradeCriteria = (criteriaId: string) => {
-    if (!user || user.role === 'super_admin') return true;
+    if (!user) return false; // No logged-in user = no edit
+    if (user.role === 'super_admin') return true;
     if (user.role === 'admin') {
       return userPermissions.some(p => p.criteria_id === criteriaId && Number(p.can_grade) === 1);
     }
     return false;
   };
   // Check if admin can comment
-  const canCommentGeneral = user?.role === 'super_admin' || userPermissions.some(p => Number(p.can_comment) === 1);
-  // Filter criteria for admin - only show criteria they can grade
+  const canCommentGeneral = !!user && (user.role === 'super_admin' || userPermissions.some(p => Number(p.can_comment) === 1));
+  // Filter criteria for admin - only show criteria they can grade; visitors see all
   const visibleCriteria = user?.role === 'admin'
     ? criteria.filter(c => userPermissions.some(p => p.criteria_id === c.id && Number(p.can_grade) === 1))
     : criteria;
