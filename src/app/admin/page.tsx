@@ -306,10 +306,10 @@ export default function AdminPage() {
         {/* Grade Table */}
         {selectedWeekId && visibleCriteria.length > 0 && (
           <div className="overflow-x-auto metallic-card rounded-xl">
-            <table className="w-full text-sm">
+            <table className="text-sm">
               <thead>
                 <tr className="border-b border-white/10">
-                  <th className="text-left px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider sticky left-0 bg-gray-900/95 z-10 min-w-[250px]">
+                  <th className="text-left px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider sticky left-0 bg-gray-900/95 z-10">
                     Estudiante
                   </th>
                   {visibleCriteria.map((crit) => (
