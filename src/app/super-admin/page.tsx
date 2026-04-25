@@ -1295,23 +1295,23 @@ export default function SuperAdminPage() {
 
             {selectedWeekId && criteriaList.filter(c => c.is_active === 1).length > 0 && (
               <div className="overflow-x-auto metallic-card rounded-xl">
-                <table className="w-full text-sm">
+                <table className="text-sm">
                   <thead>
                     <tr className="border-b border-white/10">
-                      <th className="text-left px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider sticky left-0 bg-gray-900/95 z-10 min-w-[180px]">
+                      <th className="text-left px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider sticky left-0 bg-gray-900/95 z-10">
                         Estudiante
                       </th>
                       {criteriaList.filter(c => c.is_active === 1).map((crit) => (
-                        <th key={crit.id} className="text-center px-1 py-2.5 min-w-[80px]">
-                          <div className="text-yellow-500/80 font-bold text-[11px] uppercase tracking-wider">{crit.name}</div>
-                          <div className="text-white/30 text-[10px]">Nota</div>
-                        </th>
-                      ))}
-                      {criteriaList.filter(c => c.is_active === 1).map((crit) => (
-                        <th key={`comment_${crit.id}`} className="text-center px-1 py-2.5 min-w-[100px]">
-                          <div className="text-blue-400/60 font-bold text-[10px] uppercase tracking-wider">{crit.name}</div>
-                          <div className="text-white/30 text-[10px]">Coment.</div>
-                        </th>
+                        <React.Fragment key={`frag_${crit.id}`}>
+                          <th className="text-center px-1 py-2.5 min-w-[80px]">
+                            <div className="text-yellow-500/80 font-bold text-[11px] uppercase tracking-wider">{crit.name}</div>
+                            <div className="text-white/30 text-[10px]">Nota</div>
+                          </th>
+                          <th className="text-center px-1 py-2.5 min-w-[100px]">
+                            <div className="text-blue-400/60 font-bold text-[10px] uppercase tracking-wider">{crit.name}</div>
+                            <div className="text-white/30 text-[10px]">Coment.</div>
+                          </th>
+                        </React.Fragment>
                       ))}
                       <th className="text-center px-3 py-2.5 text-yellow-500/80 font-bold text-xs uppercase tracking-wider min-w-[70px]">
                         Prom.
@@ -1329,7 +1329,7 @@ export default function SuperAdminPage() {
                             <tr className="bg-white/5">
                               <td
                                 colSpan={criteriaList.filter(c => c.is_active === 1).length * 2 + 2}
-                                className="px-3 py-1.5 font-bold text-xs uppercase tracking-wider"
+                                className="px-3 py-1.5 font-bold text-xs uppercase tracking-wider sticky left-0 bg-gray-900/95 z-10"
                                 style={{ color: family.color || '#D4AF37' }}
                               >
                                 <div className="flex items-center gap-2">
@@ -1347,7 +1347,7 @@ export default function SuperAdminPage() {
                                   <td className="px-3 py-1.5 text-white text-sm font-medium sticky left-0 bg-gray-900/90 z-10">
                                     <div className="flex items-center gap-2">
                                       <div className="w-1.5 h-6 rounded-full shrink-0" style={{ backgroundColor: student.family_color || '#D4AF37' }} />
-                                      <span className="truncate max-w-[150px]">{student.name}</span>
+                                      <span className="whitespace-nowrap">{student.name}</span>
                                     </div>
                                   </td>
                                   {activeCriteria.map((crit) => {
@@ -1358,43 +1358,39 @@ export default function SuperAdminPage() {
                                     const hasScore = score !== '' && !isNaN(scoreNum);
                                     const cellColor = hasScore ? getScoreColor(scoreNum) : '';
                                     return (
-                                      <td key={crit.id} className="px-1 py-1 text-center">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          max="20"
-                                          step="0.1"
-                                          value={score}
-                                          onChange={(e) => saUpdateGradeCell(student.id, crit.id, 'score', e.target.value)}
-                                          className="w-full max-w-[70px] px-2 py-1.5 rounded text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50 transition-colors"
-                                          style={{
-                                            backgroundColor: hasScore ? `${cellColor}20` : 'rgba(255,255,255,0.05)',
-                                            color: hasScore ? cellColor : 'rgba(255,255,255,0.3)',
-                                            border: cell?.modified ? '1px solid rgba(234,179,8,0.5)' : '1px solid rgba(255,255,255,0.1)',
-                                          }}
-                                          placeholder="—"
-                                        />
-                                      </td>
-                                    );
-                                  })}
-                                  {activeCriteria.map((crit) => {
-                                    const key = `${student.id}_${crit.id}`;
-                                    const cell = saGradeData[key];
-                                    return (
-                                      <td key={`comment_${crit.id}`} className="px-1 py-1">
-                                        <input
-                                          type="text"
-                                          value={cell?.comment || ''}
-                                          onChange={(e) => saUpdateGradeCell(student.id, crit.id, 'comment', e.target.value)}
-                                          placeholder="..."
-                                          className="w-full max-w-[100px] px-2 py-1.5 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors"
-                                          style={{
-                                            backgroundColor: cell?.comment ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)',
-                                            color: cell?.comment ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)',
-                                            border: cell?.modified ? '1px solid rgba(59,130,246,0.3)' : '1px solid rgba(255,255,255,0.05)',
-                                          }}
-                                        />
-                                      </td>
+                                      <React.Fragment key={`frag_${crit.id}`}>
+                                        <td className="px-1 py-1 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max="20"
+                                            step="0.1"
+                                            value={score}
+                                            onChange={(e) => saUpdateGradeCell(student.id, crit.id, 'score', e.target.value)}
+                                            className="w-full max-w-[70px] px-2 py-1.5 rounded text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-yellow-500/50 transition-colors"
+                                            style={{
+                                              backgroundColor: hasScore ? `${cellColor}20` : 'rgba(255,255,255,0.05)',
+                                              color: hasScore ? cellColor : 'rgba(255,255,255,0.3)',
+                                              border: cell?.modified ? '1px solid rgba(234,179,8,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                                            }}
+                                            placeholder="—"
+                                          />
+                                        </td>
+                                        <td className="px-1 py-1">
+                                          <input
+                                            type="text"
+                                            value={cell?.comment || ''}
+                                            onChange={(e) => saUpdateGradeCell(student.id, crit.id, 'comment', e.target.value)}
+                                            placeholder="..."
+                                            className="w-full max-w-[100px] px-2 py-1.5 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-colors"
+                                            style={{
+                                              backgroundColor: cell?.comment ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)',
+                                              color: cell?.comment ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)',
+                                              border: cell?.modified ? '1px solid rgba(59,130,246,0.3)' : '1px solid rgba(255,255,255,0.05)',
+                                            }}
+                                          />
+                                        </td>
+                                      </React.Fragment>
                                     );
                                   })}
                                   <td className="px-2 py-1 text-center">
