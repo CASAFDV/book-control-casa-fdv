@@ -249,7 +249,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 max-w-full mx-auto w-full px-4 py-6">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
           <h2 className="text-lg font-bold text-white">📝 Gestión de Notas</h2>
