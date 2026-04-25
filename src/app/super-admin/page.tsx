@@ -137,7 +137,7 @@ export default function SuperAdminPage() {
       // Build grade data map for table
       const newGradeData: Record<string, { score: string; comment: string; originalScore: string; originalComment: string; modified: boolean }> = {};
       for (const g of allGrades) {
-        const key = `${g.student_id}_${g.criteria_id}`;
+        const key = `${g.student_id}::${g.criteria_id}`;
         const scoreStr = g.score != null ? String(Number(g.score)) : '';
         const commentStr = g.comment || '';
         newGradeData[key] = {
@@ -500,7 +500,7 @@ export default function SuperAdminPage() {
   }
 
   function saUpdateGradeCell(studentId: string, criteriaId: string, field: 'score' | 'comment', value: string) {
-    const key = `${studentId}_${criteriaId}`;
+    const key = `${studentId}::${criteriaId}`;
     setSaGradeData(prev => {
       const existing = prev[key] || { score: '', comment: '', originalScore: '', originalComment: '', modified: false };
       const updated = {
@@ -521,9 +521,7 @@ export default function SuperAdminPage() {
     try {
       const modifiedEntries = Object.entries(saGradeData).filter(([, cell]) => cell.modified && cell.score !== '');
       const promises = modifiedEntries.map(([key, cell]) => {
-        const lastUnderscoreIdx = key.lastIndexOf('_');
-        const studentId = key.substring(0, lastUnderscoreIdx);
-        const criteriaId = key.substring(lastUnderscoreIdx + 1);
+        const [studentId, criteriaId] = key.split('::');
         return fetch('/api/grades', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -549,7 +547,7 @@ export default function SuperAdminPage() {
     const activeCriteria = criteriaList.filter(c => c.is_active === 1);
     const scores: number[] = [];
     for (const crit of activeCriteria) {
-      const key = `${studentId}_${crit.id}`;
+      const key = `${studentId}::${crit.id}`;
       const cell = saGradeData[key];
       if (cell && cell.score !== '') {
         scores.push(Number(cell.score));
@@ -1351,7 +1349,7 @@ export default function SuperAdminPage() {
                                     </div>
                                   </td>
                                   {activeCriteria.map((crit) => {
-                                    const key = `${student.id}_${crit.id}`;
+                                    const key = `${student.id}::${crit.id}`;
                                     const cell = saGradeData[key];
                                     const score = cell?.score || '';
                                     const scoreNum = Number(score);

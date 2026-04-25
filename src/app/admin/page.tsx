@@ -119,7 +119,7 @@ export default function AdminPage() {
       // Build grade data map
       const newGradeData: Record<string, GradeCell> = {};
       for (const g of grades) {
-        const key = `${g.student_id}_${g.criteria_id}`;
+        const key = `${g.student_id}::${g.criteria_id}`;
         const scoreStr = g.score != null ? String(Number(g.score)) : '';
         const commentStr = g.comment || '';
         newGradeData[key] = {
@@ -168,7 +168,7 @@ export default function AdminPage() {
     .map(f => f.id);
 
   function updateGradeCell(studentId: string, criteriaId: string, field: 'score' | 'comment', value: string) {
-    const key = `${studentId}_${criteriaId}`;
+    const key = `${studentId}::${criteriaId}`;
     setGradeData(prev => {
       const existing = prev[key] || { score: '', comment: '', originalScore: '', originalComment: '', modified: false };
       const updated = {
@@ -192,10 +192,7 @@ export default function AdminPage() {
         .filter(([, cell]) => cell.modified && cell.score !== '');
 
       const promises = modifiedKeys.map(([key, cell]) => {
-        const [studentId, criteriaId] = key.split('_');
-        // Find the actual IDs (student IDs may contain underscores)
-        const studentPart = key.substring(0, key.lastIndexOf('_'));
-        const criteriaPart = key.substring(key.lastIndexOf('_') + 1);
+        const [studentId, criteriaId] = key.split('::');
 
         return fetch('/api/grades', {
           method: 'PUT',
@@ -222,7 +219,7 @@ export default function AdminPage() {
   function getStudentAverage(studentId: string): number {
     const scores: number[] = [];
     for (const crit of visibleCriteria) {
-      const key = `${studentId}_${crit.id}`;
+      const key = `${studentId}::${crit.id}`;
       const cell = gradeData[key];
       if (cell && cell.score !== '') {
         scores.push(Number(cell.score));
@@ -361,7 +358,7 @@ export default function AdminPage() {
                               </div>
                             </td>
                             {visibleCriteria.map((crit) => {
-                              const key = `${student.id}_${crit.id}`;
+                              const key = `${student.id}::${crit.id}`;
                               const cell = gradeData[key];
                               const score = cell?.score || '';
                               const scoreNum = Number(score);
