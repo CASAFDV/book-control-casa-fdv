@@ -101,7 +101,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }: LoginModalProps)
             </svg>
           </div>
           <h2 className="metallic-title text-xl font-black tracking-wide">
-            BOOK CONTROL
+            LIBRO CONTROL
           </h2>
           <p className="text-white/50 text-sm mt-1">CASA FDV - Iniciar Sesión</p>
         </div>

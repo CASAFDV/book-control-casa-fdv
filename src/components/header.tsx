@@ -108,7 +108,7 @@ export function Header({ showBackButton, backHref }: HeaderProps) {
             <a href="/" className="flex items-center gap-2 cursor-pointer">
               <img src="/logo.png" alt="FDV" className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-contain" />
               <span className="metallic-title text-lg sm:text-xl md:text-2xl font-black tracking-wide">
-                BOOK CONTROL CASA FDV
+                LIBRO CONTROL CASA FDV
               </span>
             </a>
           </div>

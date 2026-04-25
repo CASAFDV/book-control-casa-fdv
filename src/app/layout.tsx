@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BOOK CONTROL CASA FDV",
+  title: "LIBRO CONTROL CASA FDV",
   description: "Sistema de gestión de calificaciones - Casa FDV",
   keywords: ["Casa FDV", "calificaciones", "estudiantes", "gestión"],
   authors: [{ name: "Casa FDV" }],

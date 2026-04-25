@@ -483,7 +483,7 @@ export default function StudentPage({ params }: { params: Promise<{ id: string }
         )}
       </main>
       <footer className="mt-auto py-4 text-center text-white/30 text-xs border-t border-white/5">
-        BOOK CONTROL CASA FDV &copy; {new Date().getFullYear()}
+        LIBRO CONTROL CASA FDV &copy; {new Date().getFullYear()}
       </footer>
     </div>
   );

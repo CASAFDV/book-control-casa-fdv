@@ -49,7 +49,7 @@ export function Navbar() {
         <div className="flex items-center justify-between h-14">
           <div className="flex items-center gap-4">
             <a href="/" className="metallic-title text-base font-black tracking-wide">
-              BOOK CONTROL
+              LIBRO CONTROL
             </a>
             <div className="hidden sm:flex items-center gap-1 ml-4">
               <a
