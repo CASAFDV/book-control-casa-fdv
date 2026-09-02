@@ -64,10 +64,26 @@ export function Navbar() {
               </a>
               <a
                 href="/"
-                className="px-3 py-1.5 rounded-md text-sm font-medium text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === '/'
+                    ? 'bg-yellow-500/20 text-yellow-400'
+                    : 'text-white/60 hover:text-white hover:bg-white/10'
+                }`}
               >
                 Inicio
               </a>
+              {isSuperAdmin && (
+                <a
+                  href="/reporte-mensual"
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    pathname === '/reporte-mensual'
+                      ? 'bg-yellow-500/20 text-yellow-400'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  Reporte Mensual
+                </a>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
